@@ -39,6 +39,7 @@ public class Broadcasting {
 	public final static String sourceStyle = "fill-color: red;shape:cross;";
 	public final static String senderStyle = "fill-color:blue;";
 	public final static String completedTaskStyle = "fill-color:green;";
+	public final static String TTLexpired = "fill-color:red;";
 
 
 	// execution parameters 
@@ -63,7 +64,7 @@ public class Broadcasting {
 	double p = 0.5; //probabilities of Edge-Markovian model
 	double q = 0.5;
 	int Scenario = 1; //Scenario 1//Scenario 2
-	int TTL = 1; //For Scenario 1 - the lifetime of a message on a vertex
+	int TTL = 3; //For Scenario 1 - the lifetime of a message on a vertex
 	double r = 0.1; //For Scenario 2 - the ratio of renewing nodes within the graph
 	
 	// broadcast parameters
@@ -73,6 +74,7 @@ public class Broadcasting {
 	int maxRAD = 10; // stands for max Random Assessment Delay
 	
 	
+
 	// ---- constructor
 	public Broadcasting() {
 		initGraph();
@@ -141,38 +143,54 @@ public class Broadcasting {
 			verifyEdges();
 			Tools.pause(delay);
 			System.out.println("nb iterations:"+nbIterations);
+			switch(mobilityModel) {		
+			case MARKOVIAN:		
+				//tutaj dodać zmiany stanów krawędzi dla edge-markovian
+				break;
+			default:
+				break;
+			}
+				
+			//Dodać zmiany w grafie dla Scenario 1 i scenario 2	
+			switch(Scenario) {
+			case 1:
+				/**For the first scenario, the broadcasting strategy is similar t osimple flooding except that the
+	message is broadcasted not only once but as long as its lifetime (TTL) is greater than 0. Thus,
+	at reception the lifetime of the message is equal to TTL and after k time steps, its lifetime is
+	equal to TTL−k. While the lifetime of the message is greater than 0 on a vertex, no copy of the
+	message can be received by this vertex. Thus, a vertex can receive again a copy of the message
+	only when the lifetime of its message reaches 0*/
+				//W tym miejscu przede wszystkim dodać obniżenie "message lifetime" dla każdego punktu
+				//oprócz tego będą potrzebne zmiany w metodzie simpleFlooding
+				for(Node u: stations) {
+					int lifetime = u.getAttribute("message_lifetime");
+					if(lifetime>0) {
+						u.setAttribute("message_lifetime", lifetime-1);
+						if (lifetime-1 <= 0) {
+							if(u.hasAttribute("hasTheMessage")) {
+								u.removeAttribute("hasTheMessage");}
+							if(u.hasAttribute("nbOfReceptions")){u.removeAttribute("nbOfReceptions");}
+							if(u.hasAttribute("readyToSend")){u.removeAttribute("readyToSend");}
+							if(u.hasAttribute("notTransmittedYet")){u.setAttribute("notTransmittedYet", false);}
+							if(u.hasAttribute("ui.style")){u.setAttribute("ui.style", TTLexpired);}						
+						}
+					}
+				
+				}
+				break;
+			case 2:
+				/**
+				 * For all t nt+1 = nt but r × nt nodes
+	have been replaced between t and t +1. Removed nodes are randomly chosen and the new
+	nodes are randomly positioned in the area for RWP and Manhattan. For edge-markovian
+	graphs, it is enough to remove the information in r × nt randomly chosen nodes.
+				 */
+				//Szczerze mówiąc nie jestem do końca pewien co tu zrobić
+				break;
+			}
 		}
 		
-		switch(mobilityModel) {		
-		case MARKOVIAN:		
-			//tutaj dodać zmiany stanów krawędzi dla edge-markovian
-			break;
-		default:
-			break;
-		}
-			
-		//Dodać zmiany w grafie dla Scenario 1 i scenario 2	
-		switch(Scenario) {
-		case 1:
-			/**For the first scenario, the broadcasting strategy is similar t osimple flooding except that the
-message is broadcasted not only once but as long as its lifetime (TTL) is greater than 0. Thus,
-at reception the lifetime of the message is equal to TTL and after k time steps, its lifetime is
-equal to TTL−k. While the lifetime of the message is greater than 0 on a vertex, no copy of the
-message can be received by this vertex. Thus, a vertex can receive again a copy of the message
-only when the lifetime of its message reaches 0*/
-			//W tym miejscu przede wszystkim dodać obniżenie "message lifetime" dla każdego punktu
-			//oprócz tego będą potrzebne zmiany w metodzie simpleFlooding
-			break;
-		case 2:
-			/**
-			 * For all t nt+1 = nt but r × nt nodes
-have been replaced between t and t +1. Removed nodes are randomly chosen and the new
-nodes are randomly positioned in the area for RWP and Manhattan. For edge-markovian
-graphs, it is enough to remove the information in r × nt randomly chosen nodes.
-			 */
-			//Szczerze mówiąc nie jestem do końca pewien co tu zrobić
-			break;
-		}
+		
 		
 		statistics(nbIterations);
 	}
@@ -234,26 +252,38 @@ connected graph (n(n-1) edges)
 	//dodać zmiany właściwe dla Scenario 1: punkt może otrzymać wiadomość
 	//gdy jego message lifetime = 0
 	public void simpleFlooding(Node u) {
-		if((boolean)u.getAttribute("notTransmittedYet")) {
+		if((boolean)u.getAttribute("notTransmittedYet")) {			
 			if(stepByStep) Tools.hitakey("node "+u.getId()+" will broadcast");
 			u.setAttribute("notTransmittedYet",false);
 			if(u.getId() != source.getId()) u.addAttribute("ui.style",completedTaskStyle);
 			Iterator<Node> neighbors = u.getNeighborNodeIterator();
 			while(neighbors.hasNext()) {
 				Node v = neighbors.next();
-				if(!v.hasAttribute("hasTheMessage")) {
+				boolean CanReceive = true;
+				if (Scenario == 1) {
+					//can receive if TTL = 0
+					int lifetime = v.getAttribute("message_lifetime");
+					if(lifetime > 0) {
+						CanReceive = false;
+					}
+				}
+				if(CanReceive && !v.hasAttribute("hasTheMessage")) {
 					v.addAttribute("hasTheMessage",true);
 					v.addAttribute("nbOfReceptions",1);
 					v.addAttribute("readyToSend",true);
 					v.addAttribute("notTransmittedYet",true);
 					v.addAttribute("ui.style",senderStyle);
+					if (Scenario == 1) {
+						v.setAttribute("message_lifetime", TTL);
+					}
 				} else { // we add 1 to the number of receptions
 					v.addAttribute("nbOfReceptions",
 						(int)v.getAttribute("nbOfReceptions")+1); 
 				}	
 			}
+			}
 		}
-	}
+	
 	
 	
 	
@@ -384,6 +414,10 @@ connected graph (n(n-1) edges)
 		source.addAttribute("nbOfReceptions",0);
 		source.addAttribute("notTransmittedYet",true);
 		source.addAttribute("ui.style",sourceStyle);
+		if (Scenario == 1)
+		{
+			source.setAttribute("message_lifetime", TTL);
+		}
 		readyToSend.add(source);
 	}
 	
@@ -449,6 +483,13 @@ and Manhattan.
 			if(labelOnNodes) {
 				u.setAttribute("ui.label",u.getId());
 				u.setAttribute("ui.style","text-alignment:above;");
+			}
+			switch(Scenario) {
+			case(1):
+				u.addAttribute("message_lifetime", 0);
+				break;			
+			case(2):
+				break;
 			}
 		}
 		// construction of the environment

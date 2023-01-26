@@ -19,6 +19,7 @@ package proj;
 import org.graphstream.graph.implementations.SingleGraph;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.Random;
 
@@ -53,6 +54,7 @@ public class Broadcasting {
 	
 	// mobility and graph parameters
 	int nbNodes = 300;
+	int indexNodes = nbNodes;
 	double maxSpeed = 5.0;
 	double proximityThreshold = 4;
 	int d = 70;
@@ -63,9 +65,9 @@ public class Broadcasting {
 	//Nowe parametry
 	double p = 0.5; //probabilities of Edge-Markovian model
 	double q = 0.5;
-	int Scenario = 1; //Scenario 1//Scenario 2
+	int Scenario = 2; //Scenario 1//Scenario 2
 	int TTL = 3; //For Scenario 1 - the lifetime of a message on a vertex
-	double r = 0.1; //For Scenario 2 - the ratio of renewing nodes within the graph
+	double r = 0.5; //For Scenario 2 - the ratio of renewing nodes within the graph
 	
 	// broadcast parameters
 	Node source = null;
@@ -139,27 +141,17 @@ public class Broadcasting {
 					moveMarkovian(u);
 					break;
 				}
-			}
+			}			
 			verifyEdges();
-			Tools.pause(delay);
-			System.out.println("nb iterations:"+nbIterations);
-			switch(mobilityModel) {		
-			case MARKOVIAN:		
-				//tutaj dodać zmiany stanów krawędzi dla edge-markovian
-				break;
-			default:
-				break;
-			}
-				
 			//Dodać zmiany w grafie dla Scenario 1 i scenario 2	
 			switch(Scenario) {
 			case 1:
 				/**For the first scenario, the broadcasting strategy is similar t osimple flooding except that the
-	message is broadcasted not only once but as long as its lifetime (TTL) is greater than 0. Thus,
-	at reception the lifetime of the message is equal to TTL and after k time steps, its lifetime is
-	equal to TTL−k. While the lifetime of the message is greater than 0 on a vertex, no copy of the
-	message can be received by this vertex. Thus, a vertex can receive again a copy of the message
-	only when the lifetime of its message reaches 0*/
+				message is broadcasted not only once but as long as its lifetime (TTL) is greater than 0. Thus,
+				at reception the lifetime of the message is equal to TTL and after k time steps, its lifetime is
+				equal to TTL−k. While the lifetime of the message is greater than 0 on a vertex, no copy of the
+				message can be received by this vertex. Thus, a vertex can receive again a copy of the message
+				only when the lifetime of its message reaches 0*/
 				//W tym miejscu przede wszystkim dodać obniżenie "message lifetime" dla każdego punktu
 				//oprócz tego będą potrzebne zmiany w metodzie simpleFlooding
 				for(Node u: stations) {
@@ -181,13 +173,36 @@ public class Broadcasting {
 			case 2:
 				/**
 				 * For all t nt+1 = nt but r × nt nodes
-	have been replaced between t and t +1. Removed nodes are randomly chosen and the new
-	nodes are randomly positioned in the area for RWP and Manhattan. For edge-markovian
-	graphs, it is enough to remove the information in r × nt randomly chosen nodes.
+				have been replaced between t and t +1. Removed nodes are randomly chosen and the new
+				nodes are randomly positioned in the area for RWP and Manhattan. For edge-markovian
+				graphs, it is enough to remove the information in r × nt randomly chosen nodes.
 				 */
-				//Szczerze mówiąc nie jestem do końca pewien co tu zrobić
+				Collection<Node> nodes = g.getNodeSet();
+				double nodeSize = nodes.size();
+				double numofNodes = nodeSize*r;
+				int numberofNodes = (int) numofNodes;		
+				
+				removeFromGraph(g, numberofNodes,envSize);	
+				addToGraph(g,numberofNodes, d,envSize,indexNodes);
+				updateGraph();
+				for(Node u:stations)
+				{
+					chooseDestination(u);
+				}
+				indexNodes += numberofNodes;
 				break;
 			}
+			Tools.pause(delay);
+			System.out.println("nb iterations:"+nbIterations);
+			switch(mobilityModel) {		
+			case MARKOVIAN:		
+				//tutaj dodać zmiany stanów krawędzi dla edge-markovian
+				break;
+			default:
+				break;
+			}
+				
+			
 		}
 		
 		
@@ -494,22 +509,106 @@ and Manhattan.
 		}
 		// construction of the environment
 		Node ne = g.addNode("north-east");
-		ne.setAttribute("x",envSize);
-		ne.setAttribute("y",envSize);
+		ne.setAttribute("x",(double)envSize);
+		ne.setAttribute("y",(double)envSize);
 		ne.setAttribute("ui.style","fill-color:green;size:1px;");
 		Node nw = g.addNode("north-west");
-		nw.setAttribute("x",0);
-		nw.setAttribute("y",envSize);
+		nw.setAttribute("x",(double)0);
+		nw.setAttribute("y",(double)envSize);
 		nw.setAttribute("ui.style","fill-color:green;size:1px;");
 		Node sw = g.addNode("south-west");
-		sw.setAttribute("x",0);
-		sw.setAttribute("y",0);
+		sw.setAttribute("x",(double)0);
+		sw.setAttribute("y",(double)0);
 		sw.setAttribute("ui.style","fill-color:green;size:1px;");
 		Node se = g.addNode("south-east");
-		se.setAttribute("x",envSize);
-		se.setAttribute("y",0);
+		se.setAttribute("x",(double)envSize);
+		se.setAttribute("y",(double)0);
 		se.setAttribute("ui.style","fill-color:green;size:1px;");
 		
+	}
+	
+	public void updateGraph() {
+		Iterator<Node> it = stations.iterator();
+		while (it.hasNext()) {
+			Node v = it.next();
+			if (v.hasAttribute("remove")) {
+				it.remove();
+			}
+		}
+		/*for(Node u: stations) {
+			if (u.hasAttribute("remove")) {
+				stations.remove(u);
+				u.removeAttribute("remove");
+			}
+		}*/
+		for(Node u: g.getNodeSet()) {			
+			if (u.hasAttribute("add")) {
+				stations.add(u);
+				u.removeAttribute("add");
+			}
+		}
+	}
+	public void removeFromGraph(SingleGraph g, int numberOfNodes, int environmentSize) {
+		int n = numberOfNodes;
+		int size = environmentSize;
+		Random alea = new Random(System.currentTimeMillis());
+		for(int i=0;i<n;i++) {			
+			Node u = Toolkit.randomNode(g);					
+				while (checkCorner(u, size))
+					{
+						u = Toolkit.randomNode(g);
+					}
+			u.addAttribute("remove", true);
+			g.removeNode(u);
+		}
+	}
+	
+	public boolean checkCorner(Node u, int environmentSize)
+	{
+		int size = environmentSize;		
+		double x = u.getAttribute("x");
+		double y = u.getAttribute("y");
+		if (x == size || x == 0) {
+			if (y == size || y == 0) {
+				return true;				
+			}			
+		}
+		if (y == size || y == 0) {
+			if (x == size || x == 0) {
+				return true;				
+			}	
+		}
+		return false;
+		
+	}
+	
+	public void addToGraph(SingleGraph g, int numberOfNodes, double distanceThrehold, int environmentSize, int index) {		
+		int n = numberOfNodes;
+		int size = environmentSize;
+		double d = distanceThrehold;
+		Random alea = new Random(System.currentTimeMillis());
+		ArrayList<Node> added = new ArrayList<>();
+		// Nodes creation with their coordinates
+		for(int i=0;i<n;i++) {
+			Node u = g.addNode("u_"+(index+i));
+			added.add(u);
+			// random position of the node within the environment
+			double x = alea.nextDouble()*size;
+			double y = alea.nextDouble()*size;
+			u.setAttribute("x",x);
+			u.setAttribute("y",y);
+			u.addAttribute("add", true);
+		}
+		// add edges
+		for(Node u:g.getNodeSet()) {
+			for(Node v:added) {
+				if(u.getId() != v.getId()) {
+					if((Generator.distance(u,v) < d) && (!u.hasEdgeBetween(v))) {
+						g.addEdge(u.getId()+"--"+v.getId(),u.getId(),v.getId());
+					}
+				}
+			}
+		}
 	}
 	
 	// ============= MAIN ================

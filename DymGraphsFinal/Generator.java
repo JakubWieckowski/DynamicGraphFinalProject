@@ -54,7 +54,8 @@ public class Generator {
 			}
 		}
 		return g;
-	}
+	}	
+	
 	
 	/**
 	 * a generator for a random geometric graph based on the 

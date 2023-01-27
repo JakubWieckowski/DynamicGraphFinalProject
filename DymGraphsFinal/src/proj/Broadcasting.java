@@ -24,6 +24,7 @@ import java.util.Iterator;
 import java.util.Random;
 
 import org.graphstream.algorithm.Toolkit;
+import org.graphstream.graph.Edge;
 import org.graphstream.graph.Node;
 
 
@@ -41,6 +42,8 @@ public class Broadcasting {
 	public final static String senderStyle = "fill-color:blue;";
 	public final static String completedTaskStyle = "fill-color:green;";
 	public final static String TTLexpired = "fill-color:red;";
+	public final static String edgeONstyle = "fill-color:red;size:1px;";
+	public final static String edgeOFFstyle = "fill-color:white;size:1px;";
 
 
 	// execution parameters 
@@ -59,15 +62,15 @@ public class Broadcasting {
 	double proximityThreshold = 4;
 	int d = 70;
 	int envSize = 1000;
-	int mobilityModel = RWP; //RWP // MANHATTAN; // MARKOVIAN //
+	int mobilityModel = MARKOVIAN; //RWP // MANHATTAN; // MARKOVIAN //
 	int nbParallelStreets = 10;
 	int distanceInterStreets = (int)(envSize/nbParallelStreets);
 	//Nowe parametry
-	double p = 0.5; //probabilities of Edge-Markovian model
-	double q = 0.5;
-	int Scenario = 2; //Scenario 1//Scenario 2
+	double p = 0.9; //probabilities of Edge-Markovian model
+	double q = 0.1;
+	int Scenario = 1; //Scenario 1//Scenario 2
 	int TTL = 3; //For Scenario 1 - the lifetime of a message on a vertex
-	double r = 0.5; //For Scenario 2 - the ratio of renewing nodes within the graph
+	double r = 0.2; //For Scenario 2 - the ratio of renewing nodes within the graph
 	
 	// broadcast parameters
 	Node source = null;
@@ -104,7 +107,9 @@ public class Broadcasting {
 	private void moveAndBroadcast() {
 		// execution of the algorithm		
 		boolean finished = false;
-		int nbIterations = 0;
+		int nbIterations = 0;		
+		int nbOn = 0, nbOff = 0;
+		
 		while(!finished) {
 			nbIterations++;
 			if(broadcastingStrategy == NO_BROADCASTING) {
@@ -151,9 +156,7 @@ public class Broadcasting {
 				at reception the lifetime of the message is equal to TTL and after k time steps, its lifetime is
 				equal to TTL−k. While the lifetime of the message is greater than 0 on a vertex, no copy of the
 				message can be received by this vertex. Thus, a vertex can receive again a copy of the message
-				only when the lifetime of its message reaches 0*/
-				//W tym miejscu przede wszystkim dodać obniżenie "message lifetime" dla każdego punktu
-				//oprócz tego będą potrzebne zmiany w metodzie simpleFlooding
+				only when the lifetime of its message reaches 0*/				
 				for(Node u: stations) {
 					int lifetime = u.getAttribute("message_lifetime");
 					if(lifetime>0) {
@@ -192,16 +195,49 @@ public class Broadcasting {
 				indexNodes += numberofNodes;
 				break;
 			}
-			Tools.pause(delay);
-			System.out.println("nb iterations:"+nbIterations);
 			switch(mobilityModel) {		
 			case MARKOVIAN:		
-				//tutaj dodać zmiany stanów krawędzi dla edge-markovian
+				for(Edge e:g.getEdgeSet()) {
+					if(e.getAttribute("state")==null) {
+						e.addAttribute("state", alea.nextBoolean());
+						if((boolean)e.getAttribute("state")) {
+							e.addAttribute("ui.style",edgeONstyle);
+							nbOn++;
+						}
+						else {
+							e.addAttribute("ui.style",edgeOFFstyle);
+							nbOff++;
+						}
+					}
+					else {			
+						if((boolean)e.getAttribute("state")) { // edge is on
+							if(alea.nextDouble() > p) { // change of its state
+								e.addAttribute("state",false);
+								e.addAttribute("ui.style",edgeOFFstyle);
+								nbOff++;
+							} else {
+								e.addAttribute("ui.style",edgeONstyle);
+								nbOn++;
+							}
+						} else { // edge is off 
+							if(alea.nextDouble() > q) { // change of its state 
+								e.addAttribute("state",true);
+								e.addAttribute("ui.style",edgeONstyle);
+								nbOn++;
+							} else {
+								e.addAttribute("ui.style",edgeOFFstyle);
+								nbOff++;
+							}
+						}
+					}
+				}
 				break;
 			default:
 				break;
 			}
-				
+			Tools.pause(delay);
+			System.out.println("nb iterations:"+nbIterations);			
+							
 			
 		}
 		
@@ -264,8 +300,6 @@ connected graph (n(n-1) edges)
 	 * the message
 	 * @param u
 	 */
-	//dodać zmiany właściwe dla Scenario 1: punkt może otrzymać wiadomość
-	//gdy jego message lifetime = 0
 	public void simpleFlooding(Node u) {
 		if((boolean)u.getAttribute("notTransmittedYet")) {			
 			if(stepByStep) Tools.hitakey("node "+u.getId()+" will broadcast");
@@ -323,10 +357,9 @@ connected graph (n(n-1) edges)
 		else moveStraight(u);
 	}
 	
-	public void moveMarkovian(Node u) {
-		//Dodać przemiszczanie według edge-markovian model z opisu projektu,
-		//ta metoda najpewniej będzie wyglądać podobnie do moveRWP i move Manhattan
-		int placeholder = 0;
+	public void moveMarkovian(Node u) {		
+		if(arrivedAtDestination(u)) chooseDestination(u);
+		else moveStraight(u);
 	}
 	
 	
@@ -392,7 +425,9 @@ connected graph (n(n-1) edges)
 			}
 			break;
 		case MARKOVIAN:
-			//Dodać wybieranie dest według edge-markovian model z opisu projektu
+			//same here as RWP as edge markovian is more about the state of the edges than about way of choosing destination
+			u.setAttribute("xdest",alea.nextDouble()*envSize);
+			u.setAttribute("ydest",alea.nextDouble()*envSize);
 			break;
 		}
 	}
@@ -450,7 +485,9 @@ connected graph (n(n-1) edges)
 			}
 			break;
 		case MARKOVIAN:
-			break;
+			//same as RWP
+			for(Node u:stations) chooseDestination(u);
+			break;			
 		}
 	}
 	
@@ -524,6 +561,11 @@ and Manhattan.
 		se.setAttribute("x",(double)envSize);
 		se.setAttribute("y",(double)0);
 		se.setAttribute("ui.style","fill-color:green;size:1px;");
+		if (mobilityModel == MARKOVIAN) {
+			for(Edge e: g.getEdgeSet()) {
+				e.addAttribute("state",alea.nextBoolean()); // on is true off is false
+			}
+		}
 		
 	}
 	
@@ -603,8 +645,11 @@ and Manhattan.
 		for(Node u:g.getNodeSet()) {
 			for(Node v:added) {
 				if(u.getId() != v.getId()) {
-					if((Generator.distance(u,v) < d) && (!u.hasEdgeBetween(v))) {
-						g.addEdge(u.getId()+"--"+v.getId(),u.getId(),v.getId());
+					if((Generator.distance(u,v) < d) && (!u.hasEdgeBetween(v)) && !checkCorner(u, envSize)) {
+						Edge e = g.addEdge(u.getId()+"--"+v.getId(),u.getId(),v.getId());
+						if(mobilityModel==MARKOVIAN) {
+							e.addAttribute("state",alea.nextBoolean()); // on is true off is false
+						}
 					}
 				}
 			}

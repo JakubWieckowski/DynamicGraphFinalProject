@@ -234,13 +234,16 @@ public class Broadcasting {
 				break;
 			default:
 				break;
-			}
+			}			
 			Tools.pause(delay);
+			
+			// Tutaj dać odnośnik do nowej funkcji z tymi statystykami, które są potrzebne
+			// ta funkcja "statistics" może nie być użyteczna do tych celów
+			// wypisuje ona także po wszystkich iteracjach, co może utrudnić wyliczanie
 			System.out.println("nb iterations:"+nbIterations);			
 							
 			
-		}
-		
+		}		
 		
 		
 		statistics(nbIterations);
@@ -248,6 +251,9 @@ public class Broadcasting {
 	
 	
 	// ================= STATISTICS ================
+	
+	//Nie o te statystyki chodzi
+	//sprawdwyżej
 	
 	/**
 	 * in this method, we measure:
@@ -258,16 +264,7 @@ public class Broadcasting {
 	 * Max performance: 1, min performance: 1/n 
 	 * Max Efficiency: 1, min efficiency: large number  
 	 * 
-	 */
-	//Dodać Vertices Nervousness oraz Edges Nervousness
-	//Oprócz tego mieć na uwadze to:
-	/*For each configuration of generated dynamic graphs, the following measures, at each time
-step, have to be recorded :
-— the density of the graph (number of edges of the graph / number of edges of a full-
-connected graph (n(n-1) edges)
-— the number of vertices owning a message
-— the nervousness
-— the number of connected component*/
+	 */	
 	public void statistics(int nbIter) {
 		int nbReachedStations = 0;
 		int sumOfReceivedMessages = 0;

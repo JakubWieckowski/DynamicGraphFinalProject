@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.Random;
 
+import org.graphstream.algorithm.ConnectedComponents;
 import org.graphstream.algorithm.Toolkit;
 import org.graphstream.graph.Edge;
 import org.graphstream.graph.Node;
@@ -51,7 +52,7 @@ public class Broadcasting {
 	Random alea = new Random(System.currentTimeMillis());
 	SingleGraph g;
 	ArrayList<Node> stations;
-	boolean stepByStep = true;
+	boolean stepByStep = false;
 	boolean labelOnNodes = false;
 	int maxIterations = 10000; // if no broadcasting algo is running
 	
@@ -62,12 +63,12 @@ public class Broadcasting {
 	double proximityThreshold = 4;
 	int d = 70;
 	int envSize = 1000;
-	int mobilityModel = MARKOVIAN; //RWP // MANHATTAN; // MARKOVIAN //
+	int mobilityModel = RWP; //RWP // MANHATTAN; // MARKOVIAN //
 	int nbParallelStreets = 10;
 	int distanceInterStreets = (int)(envSize/nbParallelStreets);
 	//Nowe parametry
 	double p = 0.9; //probabilities of Edge-Markovian model
-	double q = 0.1;
+	double q = 0.9;
 	int Scenario = 1; //Scenario 1//Scenario 2
 	int TTL = 3; //For Scenario 1 - the lifetime of a message on a vertex
 	double r = 0.2; //For Scenario 2 - the ratio of renewing nodes within the graph
@@ -109,6 +110,10 @@ public class Broadcasting {
 		boolean finished = false;
 		int nbIterations = 0;		
 		int nbOn = 0, nbOff = 0;
+		ArrayList<Node> vT = new ArrayList<>();
+		ArrayList<Node> vTprev = new ArrayList<>();
+		ArrayList<Edge> eT = new ArrayList<>();
+		ArrayList<Edge> eTprev = new ArrayList<>();
 		
 		while(!finished) {
 			nbIterations++;
@@ -147,16 +152,9 @@ public class Broadcasting {
 					break;
 				}
 			}			
-			verifyEdges();
-			//Dodać zmiany w grafie dla Scenario 1 i scenario 2	
+			verifyEdges();			
 			switch(Scenario) {
-			case 1:
-				/**For the first scenario, the broadcasting strategy is similar t osimple flooding except that the
-				message is broadcasted not only once but as long as its lifetime (TTL) is greater than 0. Thus,
-				at reception the lifetime of the message is equal to TTL and after k time steps, its lifetime is
-				equal to TTL−k. While the lifetime of the message is greater than 0 on a vertex, no copy of the
-				message can be received by this vertex. Thus, a vertex can receive again a copy of the message
-				only when the lifetime of its message reaches 0*/				
+			case 1:							
 				for(Node u: stations) {
 					int lifetime = u.getAttribute("message_lifetime");
 					if(lifetime>0) {
@@ -173,13 +171,7 @@ public class Broadcasting {
 				
 				}
 				break;
-			case 2:
-				/**
-				 * For all t nt+1 = nt but r × nt nodes
-				have been replaced between t and t +1. Removed nodes are randomly chosen and the new
-				nodes are randomly positioned in the area for RWP and Manhattan. For edge-markovian
-				graphs, it is enough to remove the information in r × nt randomly chosen nodes.
-				 */
+			case 2:				
 				Collection<Node> nodes = g.getNodeSet();
 				double nodeSize = nodes.size();
 				double numofNodes = nodeSize*r;
@@ -236,15 +228,34 @@ public class Broadcasting {
 				break;
 			}			
 			Tools.pause(delay);
+			for(Node u:stations) {
+				vT.add(u);
+			}
+			for(Edge e:g.getEdgeSet()) {
+				if(mobilityModel == MARKOVIAN) {
+					if((boolean)e.getAttribute("state")) {
+						eT.add(e);
+					}
+				}
+				else {					
+					eT.add(e);
+				}				
+			}			
 			
-			// Tutaj dać odnośnik do nowej funkcji z tymi statystykami, które są potrzebne
-			// ta funkcja "statistics" może nie być użyteczna do tych celów
-			// wypisuje ona także po wszystkich iteracjach, co może utrudnić wyliczanie
-			System.out.println("nb iterations:"+nbIterations);			
-							
+			iterationStatistics(nbIterations, vT, vTprev, eT, eTprev);
+			for (Node u: vT) {
+				vTprev.add(u);
+			}			
+			vT.clear();
+			for (Edge e: eT) {
+				eTprev.add(e);
+			}			
+			eT.clear();
+			System.out.println("nb iterations:"+nbIterations);
+			Tools.hitakey("Start new interation");
+			System.out.println("\n");
 			
-		}		
-		
+		}	
 		
 		statistics(nbIterations);
 	}
@@ -252,8 +263,87 @@ public class Broadcasting {
 	
 	// ================= STATISTICS ================
 	
-	//Nie o te statystyki chodzi
-	//sprawdwyżej
+	public void iterationStatistics(int nbIter, ArrayList<Node> vT,	ArrayList<Node> vTprev,	ArrayList<Edge> eT, 
+	ArrayList<Edge> eTprev) {
+		double dens = 0;
+		int hasMessage = 0;
+		double vNervousness = 0;
+		double eNervousness = 0;		
+		ConnectedComponents cc = new ConnectedComponents();
+		if (mobilityModel != MARKOVIAN) {
+			dens = Toolkit.density(g);
+			cc.init(g);
+		}
+		else {
+			SingleGraph h = g;
+			for(Edge e:h.getEdgeSet()) {
+				if(!(boolean)e.getAttribute("state")) {
+					h.removeEdge(e);
+				}
+			}
+			dens = Toolkit.density(h);				
+			cc.init(h);
+		}
+		for(Node u:stations) {
+			if(u.hasAttribute("hasTheMessage")) {
+				hasMessage += 1;
+			}
+		}
+		if (Scenario == 2) {
+			//Vertices nervousness
+			ArrayList<Node> vSum = new ArrayList<>();
+			ArrayList<Node> vCross = new ArrayList<>();
+			for(Node u: vT) {
+				vSum.add(u);
+				if(vTprev.contains(u)) {
+					vCross.add(u);
+				}
+			}
+			for(Node u: vTprev) {
+				if(!vSum.contains(u)) {
+					vSum.add(u);
+				}
+			}
+			ArrayList<Node> vDiff = new ArrayList<>();
+			for (Node u: vSum) {
+				if(!vCross.contains(u)) {
+					vDiff.add(u);
+				}				
+			}
+			vNervousness = (double)vDiff.size()/(double)vSum.size();
+		}
+		//Edge nervousness
+		ArrayList<Edge> eSum = new ArrayList<>();
+		ArrayList<Edge> eCross = new ArrayList<>();
+		for(Edge e: eT) {
+			eSum.add(e);
+			if(eTprev.contains(e)) {
+				eCross.add(e);
+			}
+		}
+		for(Edge e: eTprev) {
+			if(!eSum.contains(e)) {
+				eSum.add(e);
+			}
+		}
+		ArrayList<Edge> eDiff = new ArrayList<>();
+		for (Edge e: eSum) {
+			if(!eCross.contains(e)) {
+				eDiff.add(e);
+			}				
+		}
+		eNervousness = (double)eDiff.size()/(double)eSum.size();
+		System.out.println("Statistics at iteration "+ nbIter + ":");
+		System.out.println("Graph density:"+ dens);
+		System.out.println("Vertices owning the message:"+ hasMessage);
+		if (Scenario == 2) {
+			System.out.println("Vertice nervousness (compared with the previous iteration):"+ vNervousness);
+		}
+		System.out.println("Edge nervousness(compared with the previous iteration):"+ eNervousness);
+		System.out.println("Connected components:"+ cc.getConnectedComponentsCount());	
+		
+	}	
+	
 	
 	/**
 	 * in this method, we measure:
